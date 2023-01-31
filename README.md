@@ -18,7 +18,7 @@ Use `tracer` utility to read `cat-and-mouse.if` and `cat-and-mouse-1.xtr` and pr
 ```bash
 tracer cat-and-mouse.if cat-and-mouse-1.xtr
 ```
-Example output:
+Example output (see *.txt files):
 ```txt
 State: Cat.L0 Mouse.L13 CatP.Idle MouseP.Idle Cat.s=0 Mouse.s=13 #t(0)-#time<=0 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-#t(0)<=1 #time-time<=0 time-CatP.x<=0 CatP.x-MouseP.x<=0 MouseP.x-#time<=0 
 
