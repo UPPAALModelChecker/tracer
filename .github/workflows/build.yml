@@ -35,3 +35,10 @@ jobs:
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: ctest -C ${{env.BUILD_TYPE}}
 
+    - name: Compare outputs with pre-recorded results
+      working-directory: ${{github.workspace}}/build
+      run: |
+        ./tracer ../cat-and-mouse.if ../cat-and-mouse-1.xtr > cat-and-mouse-1.txt
+        diff ../cat-and-mouse-1.txt cat-and-mouse-1.txt
+        ./tracer ../cat-and-mouse.if ../cat-and-mouse-1.xtr > cat-and-mouse-cheese.txt
+        diff ../cat-and-mouse-cheese.txt cat-and-mouse-cheese.txt
