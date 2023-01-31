@@ -4,6 +4,13 @@ project(tracer VERSION 1.0 LANGUAGES CXX C)
 include(stdcpp.cmake)
 include(sanitizers.cmake)
 
+option(CORA "Priced Timed Automata support from Uppaal CORA" OFF)
+
+if (CORA)
+    add_compile_definitions(ENABLE_CORA)
+    message(STATUS "Enabled Priced Timed Automata from Uppaal CORA")
+endif(CORA)
+
 enable_testing()
 
 add_executable(tracer tracer.cpp)

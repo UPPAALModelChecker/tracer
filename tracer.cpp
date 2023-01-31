@@ -1,9 +1,6 @@
-// -*- mode: C++; c-file-style: "stroustrup"; c-basic-offset: 4;
-// indent-tabs-mode: nil; -*-
-
-/* tracer - Utility for printing UPPAAL XTR trace files.
+/** tracer - Utility for printing UPPAAL XTR trace files.
+   Copyright (C) 2017-2023 Aalborg University.
    Copyright (C) 2006 Uppsala University and Aalborg University.
-   Copyright (C) 2017 Aalborg University.
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public License
@@ -21,11 +18,11 @@
    USA
 */
 
+#include "tracer.hpp"
+
 #include <algorithm>
 #include <fstream>
 #include <iostream>
-#include <limits>
-#include <map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -40,107 +37,17 @@
  *
  * The utility basically contains two parsers: One for the
  * intermediate format and one for the XTR format. You may want to use
- * them a starting point for writing analysis tools.
+ * them as a starting point for writing analysis tools.
  *
  * Notice that the intermediate format uses a global numbering of
- * clocks, variables, locations, etc. This is in contrast to the XTR
+ * clocks, integers, locations, etc. This is in contrast to the XTR
  * format, which makes a clear distinction between e.g. clocks and
- * variables and uses process local number of locations and
+ * integers and uses process local number of locations and
  * edges. Care must be taken to convert between these two numbering
  * schemes.
  */
 
-using std::cout;
 using std::endl;
-
-/** Representation of a memory cell. */
-struct cell_t
-{
-    enum type_t : int { CONST, CLOCK, VAR, META, SYS_META, COST, LOCATION, FIXED };
-    enum flags_t : int { NONE, COMMITTED, URGENT };
-    /** The type of the cell. */
-    type_t type;
-
-    /** Name of cell. Not all types have names. */
-    std::string name;
-
-    union
-    {
-        int value;
-        struct
-        {
-            int nr;
-        } clock;
-        struct
-        {
-            int min;
-            int max;
-            int init;
-            int nr;
-        } var;
-        struct
-        {
-            int min;
-            int max;
-            int init;
-            int nr;
-        } meta;
-        struct
-        {
-            int min;
-            int max;
-        } sys_meta;
-        struct
-        {
-            flags_t flags;
-            int process;
-            int invariant;
-        } location;
-        struct
-        {
-            int min;
-            int max;
-        } fixed;
-    };
-};
-
-/** Representation of a process. */
-struct process_t
-{
-    int initial{-1};
-    std::string name;
-    std::vector<int> locations;
-    std::vector<int> edges;
-};
-
-/** Representation of an edge. */
-struct edge_t
-{
-    int process{-1};
-    int source{-1};
-    int target{-1};
-    int guard{-1};
-    int sync{-1};
-    int update{-1};
-};
-
-/** The UPPAAL model in intermediate format. */
-static std::vector<cell_t> layout;
-static std::vector<int> instructions;
-static std::vector<process_t> processes;
-static std::vector<edge_t> edges;
-static std::map<int, std::string> expressions;
-
-/** For convenience we keep the size of the system here. */
-static size_t processCount = 0;
-static size_t variableCount = 0;
-static size_t clockCount = 0;
-
-/** These are mappings from variable and clock indices to
- * the names of these variables and clocks.
- */
-static std::vector<std::string> clocks;
-static std::vector<std::string> variables;
 
 /** Thrown by parser upon parse errors. */
 class invalid_format : public std::runtime_error
@@ -150,10 +57,10 @@ public:
 };
 
 /** Reads one line from file. Skips comments. */
-static bool read(std::istream& file, std::string& str)
+static bool read_line(std::istream& file, std::string& str)
 {
     do {
-        if (!getline(file, str)) {
+        if (!std::getline(file, str)) {
             return false;
         }
     } while (!str.empty() && str[0] == '#');
@@ -164,14 +71,13 @@ static bool read(std::istream& file, std::string& str)
 static std::istream& read_dot(std::istream& is)
 {
     std::string str;
-    getline(is, str);
+    std::getline(is, str);
     if (std::all_of(str.begin(), str.end(), isspace))
-        getline(is, str);  // skip white-spaces if any
-    if (str != ".") {
-        std::cerr << "Expecting a line with '.' but got '" << str << "'" << endl;
-        assert(false);
-        exit(EXIT_FAILURE);
-    }
+        std::getline(is, str);  // skip white-spaces if any
+    if (is.eof())
+        throw invalid_format{"Expecting a dot ('.') but got EOF"};
+    if (str != ".")
+        throw invalid_format{"Expecting a dot ('.') but got '" + str + "'"};
     return is;
 }
 
@@ -183,278 +89,244 @@ inline std::istream& skip_spaces(std::istream& is)
 }
 
 /** Parses intermediate format. */
-static void loadIF(std::istream& file)
+std::istream& model_t::read(std::istream& is)
 {
+    clear();
     std::string str;
     std::string section;
-    char name[128];
     int index;
+    int mn, mx, init, nr, value;
+    int process, invariant;
+    int source, target, guard, sync, update;
+    char name[128];
 
-    while (getline(file, section)) {
+    while (std::getline(is, section)) {
         if (section == "layout") {
-            cell_t cell;
-            while (read(file, str) && !str.empty() && (isspace(str[0]) == 0)) {
+            auto cell = cell_t{};
+            while (read_line(is, str) && !str.empty() && (isspace(str[0]) == 0)) {
                 char s[6];
                 const auto* cstr = str.c_str();
-
-                if (sscanf(cstr, "%d:clock:%d:%31s", &index, &cell.clock.nr, name) == 3) {
-                    cell.type = cell_t::CLOCK;
+                if (sscanf(cstr, "%d:clock:%d:%31s", &index, &nr, name) == 3) {
                     cell.name = name;
-                    clocks.emplace_back(name);
-                    clockCount++;
-                } else if (sscanf(cstr, "%d:const:%d", &index, &cell.value) == 2) {
-                    cell.type = cell_t::CONST;
-                } else if (sscanf(cstr, "%d:var:%d:%d:%d:%d:%31s", &index, &cell.var.min, &cell.var.max, &cell.var.init,
-                                  &cell.var.nr, name) == 6) {
-                    cell.type = cell_t::VAR;
+                    cell.data = cell_t::clock_t{nr};
+                    this->clocks.push_back(name);
+                } else if (sscanf(cstr, "%d:const:%d", &index, &value) == 2) {
+                    cell.data = cell_t::const_t{value};
+                } else if (sscanf(cstr, "%d:var:%d:%d:%d:%d:%31s", &index, &mn, &mx, &init, &nr, name) == 6) {
                     cell.name = name;
-                    variables.emplace_back(name);
-                    variableCount++;
-                } else if (sscanf(cstr, "%d:meta:%d:%d:%d:%d:%31s", &index, &cell.meta.min, &cell.meta.max,
-                                  &cell.meta.init, &cell.meta.nr, name) == 6) {
-                    cell.type = cell_t::META;
+                    cell.data = cell_t::integer_t{mn, mx, init, nr};
+                    this->integers.push_back(name);
+                } else if (sscanf(cstr, "%d:meta:%d:%d:%d:%d:%31s", &index, &mn, &mx, &init, &nr, name) == 6) {
                     cell.name = name;
-                    variables.emplace_back(name);
-                    variableCount++;
-                } else if (sscanf(cstr, "%d:sys_meta:%d:%d:%31s", &index, &cell.sys_meta.min, &cell.sys_meta.max,
-                                  name) == 4) {
-                    cell.type = cell_t::SYS_META;
+                    cell.data = cell_t::meta_t{mn, mx, init, nr};
+                    this->integers.emplace_back(name);
+                } else if (sscanf(cstr, "%d:sys_meta:%d:%d:%31s", &index, &mn, &mx, name) == 4) {
                     cell.name = name;
+                    cell.data = cell_t::sys_meta_t{mn, mx};
                 } else if (sscanf(cstr, "%d:location::%31s", &index, name) == 2) {
-                    cell.type = cell_t::LOCATION;
-                    cell.location.flags = cell_t::NONE;
                     cell.name = name;
+                    cell.data = cell_t::location_t{cell_t::NONE};
                 } else if (sscanf(cstr, "%d:location:committed:%31s", &index, name) == 2) {
-                    cell.type = cell_t::LOCATION;
-                    cell.location.flags = cell_t::COMMITTED;
                     cell.name = name;
+                    cell.data = cell_t::location_t{cell_t::COMMITTED};
                 } else if (sscanf(cstr, "%d:location:urgent:%31s", &index, name) == 2) {
-                    cell.type = cell_t::LOCATION;
-                    cell.location.flags = cell_t::URGENT;
                     cell.name = name;
-                } else if (sscanf(cstr, "%d:static:%d:%d:%31s", &index, &cell.fixed.min, &cell.fixed.max, name) == 4) {
-                    cell.type = cell_t::FIXED;
+                    cell.data = cell_t::location_t{cell_t::URGENT};
+                } else if (sscanf(cstr, "%d:static:%d:%d:%31s", &index, &mn, &mx, name) == 4) {
                     cell.name = name;
+                    cell.data = cell_t::fixed_t{mn, mx};
                 } else if (sscanf(cstr, "%d:%5s", &index, s) == 2 && strcmp(s, "cost") == 0) {
-                    cell.type = cell_t::COST;
+                    cell.data = cell_t::cost_t{};
                 } else {
                     throw invalid_format(str);
                 }
-
-                layout.push_back(cell);
+                this->layout.push_back(std::move(cell));
             }
 #if defined(ENABLE_CORA) || defined(ENABLE_PRICED)
-            cell.type = cell_t::VAR;
-            cell.var.min = std::numeric_limits<int32_t>::min();
-            cell.var.max = std::numeric_limits<int32_t>::max();
-            cell.var.init = 0;
-
             cell.name = "infimum_cost";
-            cell.var.nr = variableCount++;
-            variables.push_back(cell.name);
-            layout.push_back(cell);
+            cell.data = cell_t::integer_t{std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max(), 0,
+                                          (int)model.integers.size()};
+            model.integers.push_back(cell.name);
+            model.layout.push_back(cell);
 
             cell.name = "offset_cost";
-            cell.var.nr = variableCount++;
-            variables.push_back(cell.name);
-            layout.push_back(cell);
+            cell.data = cell_t::integer_t{std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max(), 0,
+                                          (int)model.integers.size()};
+            model.integers.push_back(cell.name);
+            model.layout.push_back(cell);
 
-            for (size_t i = 1; i < clocks.size(); ++i) {
+            for (size_t i = 1; i < model.clocks.size(); ++i) {
                 cell.name = "#rate[";
-                cell.name.append(clocks[i]);
+                cell.name.append(model.clocks[i]);
                 cell.name.append("]");
-                cell.var.nr = variableCount++;
-                variables.push_back(cell.name);
-                layout.push_back(cell);
+                cell.data = cell_t::integer_t{std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max(),
+                                              0, (int)model.integers.size()};
+                model.integers.push_back(cell.name);
+                model.layout.push_back(cell);
             }
 #endif
         } else if (section == "instructions") {
-            while (read(file, str) && !str.empty() && ((isspace(str[0]) == 0) || str[0] == '\t')) {
+            while (read_line(is, str) && !str.empty() && ((isspace(str[0]) == 0) || str[0] == '\t')) {
                 int address;
                 int values[4];
-                if (str[0] == '\t') {  // skip pretty-printed instruction text
+                if (str[0] == '\t')  // skip pretty-printed instruction text
                     continue;
-                }
                 int cnt = sscanf(str.c_str(), "%d:%d%d%d%d", &address, &values[0], &values[1], &values[2], &values[3]);
-                if (cnt < 2) {
+                if (cnt < 2)
                     throw invalid_format("In instruction section");
-                }
-
-                for (int i = 0; i < cnt - 1; ++i) {
+                for (int i = 0; i < cnt - 1; ++i)
                     instructions.push_back(values[i]);
-                }
             }
         } else if (section == "processes") {
-            while (read(file, str) && !str.empty() && (isspace(str[0]) == 0)) {
-                process_t process;
-                if (sscanf(str.c_str(), "%d:%d:%31s", &index, &process.initial, name) != 3) {
+            while (read_line(is, str) && !str.empty() && (isspace(str[0]) == 0)) {
+                auto process = process_t{};
+                if (sscanf(str.c_str(), "%d:%d:%31s", &index, &process.initial, name) != 3)
                     throw invalid_format("In process section");
-                }
                 process.name = name;
-                processes.push_back(process);
-                processCount++;
+                this->processes.push_back(process);
             }
         } else if (section == "locations") {
-            while (read(file, str) && !str.empty() && (isspace(str[0]) == 0)) {
-                int index;
-                int process;
-                int invariant;
-
+            while (read_line(is, str) && !str.empty() && (isspace(str[0]) == 0)) {
                 if (sscanf(str.c_str(), "%d:%d:%d", &index, &process, &invariant) != 3)
                     throw invalid_format("In location section");
-
-                layout[index].location.process = process;
-                layout[index].location.invariant = invariant;
-                processes[process].locations.push_back(index);
+                assert(index < layout.size());
+                auto& cell = this->layout[index];
+                assert(std::holds_alternative<cell_t::location_t>(cell.data));
+                auto& location = std::get<cell_t::location_t>(cell.data);
+                location.process = process;
+                location.invariant = invariant;
+                assert(0 <= process);
+                assert(process <= processes.size());
+                this->processes[process].locations.push_back(index);
             }
         } else if (section == "edges") {
-            while (read(file, str) && !str.empty() && (isspace(str[0]) == 0)) {
-                edge_t edge;
-
-                if (sscanf(str.c_str(), "%d:%d:%d:%d:%d:%d", &edge.process, &edge.source, &edge.target, &edge.guard,
-                           &edge.sync, &edge.update) != 6) {
+            while (read_line(is, str) && !str.empty() && (isspace(str[0]) == 0)) {
+                if (sscanf(str.c_str(), "%d:%d:%d:%d:%d:%d", &process, &source, &target, &guard, &sync, &update) != 6)
                     throw invalid_format("In edge section");
-                }
-
-                processes[edge.process].edges.push_back(edges.size());
-                edges.push_back(edge);
+                assert(0 <= process);
+                assert(process <= processes.size());
+                this->processes[process].edges.push_back(this->edges.size());
+                this->edges.push_back(edge_t{process, source, target, guard, sync, update});
             }
         } else if (section == "expressions") {
-            while (read(file, str) && !str.empty() && (isspace(str[0]) == 0)) {
-                if (sscanf(str.c_str(), "%d", &index) != 1) {
+            while (read_line(is, str) && !str.empty() && (isspace(str[0]) == 0)) {
+                if (sscanf(str.c_str(), "%d", &index) != 1)
                     throw invalid_format("In expression section");
-                }
 
-                /* Find expression string (after the third colon). */
-                const auto* s = str.c_str();
-                int cnt = 3;
-                while ((cnt != 0) && (*s != 0)) {
-                    cnt -= static_cast<int>(*s == ':');
-                    s++;
-                }
-                if (cnt != 0) {
-                    throw invalid_format("In expression section");
-                }
+                // Find expression string (after the third colon).
+                auto pos = str.find_first_of(':');
+                auto count = 0u;
+                while (pos != str.npos && ++count < 3)
+                    pos = str.find_first_of(':', pos + 1);
+                if (pos == str.npos || count != 3)
+                    throw invalid_format("Missing colon in expression section");
 
-                /* Trim white space. */
-                while ((*s != 0) && (isspace(*s) != 0)) {
-                    s++;
-                }
-                const auto* t = s + strlen(s) - 1;
-                while (t >= s && (isspace(*t) != 0)) {
-                    t--;
-                }
-
-                expressions[index] = std::string(s, t + 1);
+                // Trim white space.
+                pos = str.find_first_not_of(" \r\n\t\v", pos + 1);
+                auto end = str.find_last_not_of(" \r\n\t\v");
+                this->expressions[index] = str.substr(pos, end - pos + 1);
             }
         } else {
             throw invalid_format("Unknown section");
         }
     }
+    return is;
 }
 
-/** A bound for a clock constraint. A bound consists of a value and a
- * bit indicating whether the bound is strict or not.
- */
-struct bound_t
+void State::set_bound(size_t clock_count, int i, int j, bound_t bound)
 {
-    int value : 31;   // The value of the bound
-    bool strict : 1;  // True if the bound is strict
-};
-
-/** The bound (infinity, <). */
-static constexpr bound_t infinity = {std::numeric_limits<int32_t>::max() >> 1, true};
-
-/** The bound (0, <=). */
-static constexpr bound_t zero = {0, false};
-
-/** A symbolic state. A symbolic state consists of a location vector, a
- * variable vector and a zone describing the possible values of the
- * clocks in a symbolic manner.
- */
-class State
-{
-public:
-    State();
-    explicit State(std::istream& file);
-    State(const State& s) = delete;
-    State(State&& s) = delete;
-    ~State() = default;
-
-    int& get_location(size_t i) { return locations[i]; }
-    int& get_variable(size_t i) { return integers[i]; }
-    void set_bound(int i, int j, const bound_t& bound) { dbm[i * clockCount + j] = bound; }
-
-    int get_location(size_t i) const { return locations[i]; }
-    int get_variable(size_t i) const { return integers[i]; }
-    const bound_t& get_bound(size_t i, size_t j) const { return dbm[i * clockCount + j]; }
-
-private:
-    std::vector<int> locations;
-    std::vector<int> integers;
-    std::vector<bound_t> dbm;
-};
-
-State::State(): locations(processCount), integers(variableCount), dbm(clockCount * clockCount, infinity)
-{
-    // Set diagonal and lower bounds to zero
-    for (int i = 0; i < clockCount; ++i) {
-        set_bound(0, i, zero);
-        set_bound(i, i, zero);
-    }
+    assert(0 < i || 0 < j || (bound.value == 0 && bound.strict == false));
+    assert(i < clock_count);
+    assert(j < clock_count);
+    const auto index = i * clock_count + j;
+    assert(index < dbm.size());
+    dbm[index] = bound;
 }
 
-State::State(std::istream& file): State()
+const bound_t& State::get_bound(size_t clock_count, int i, int j) const
 {
-    // Read locations.
+    assert(i < clock_count);
+    assert(j < clock_count);
+    const auto index = i * clock_count + j;
+    assert(index < dbm.size());
+    return dbm[index];
+}
+
+std::istream& State::read(const model_t& model, std::istream& is)
+{
+    // Read locations:
+    locations.assign(model.processes.size(), -1);
     for (auto& l : locations)
-        file >> l;
-    file >> read_dot;
+        is >> l;
+    is >> read_dot;
 
-    // Read DBM.
-    int i, j, bnd;
-    while (file >> i >> j >> bnd) {
-        file >> read_dot;
-        set_bound(i, j, {bnd >> 1, ((bnd & 1) != 0)});
+    // Read DBM: list of bounds of arbitrary length
+    const auto clock_count = model.clocks.size();
+    dbm.assign(clock_count * clock_count, infinity);
+    for (int i = 0; i < clock_count; ++i) {
+        set_bound(clock_count, 0, i, zero);
+        set_bound(clock_count, i, i, zero);
     }
-    file.clear();
-    file >> read_dot;
+    int i, j, bnd;
+    while (is >> i >> j >> bnd)
+        if (is >> read_dot)
+            set_bound(clock_count, i, j, {bnd >> 1, ((bnd & 1) != 0)});
+    is.clear();  // failed to read a bound -- end of list
+    is >> read_dot;
 
-    // Read integers.
-    for (auto& v : integers)
-        file >> v;
-    file >> read_dot;
+    // Read integer variable values:
+    integers.assign(model.integers.size(), -1);
+    for (auto& i : integers)
+        is >> i;
+    return is >> read_dot;
 }
 
-struct Edge
-{
-    int process{-1};
-    int edge{-1};
-    std::vector<int> select{};
-};
-
-/** A transition consists of one or more edges. Edges are indexes from
- * 0 in the order they appear in the input file.
+/** Output operator for a symbolic state. Prints the location vector,
+ * the integers and the zone of the symbolic state.
  */
-struct Transition
+std::ostream& State::print(const model_t& model, std::ostream& os) const
 {
-    std::vector<Edge> edges{};
-    explicit Transition(std::istream& is);
-};
+    // Print location vector.
+    assert(model.processes.size() == locations.size());
+    for (size_t p = 0; p < model.processes.size(); ++p) {
+        const auto& proc = model.processes[p];
+        int idx = proc.locations[locations[p]];
+        os << proc.name << '.' << model.layout[idx].name << " ";
+    }
 
-Transition::Transition(std::istream& is)
+    // Print integers.
+    assert(model.integers.size() == integers.size());
+    for (size_t v = 0; v < model.integers.size(); ++v)
+        os << model.integers[v] << "=" << integers[v] << ' ';
+
+    // Print clocks.
+    const auto clock_count = model.clocks.size();
+    assert(dbm.size() == clock_count * clock_count);
+    for (size_t i = 0; i < clock_count; i++) {
+        for (size_t j = 0; j < clock_count; j++) {
+            if (i != j) {
+                const bound_t& bnd = get_bound(clock_count, i, j);
+                if (bnd.value != infinity.value)
+                    os << model.clocks[i] << "-" << model.clocks[j] << (bnd.strict ? "<" : "<=") << bnd.value << " ";
+            }
+        }
+    }
+
+    return os;
+}
+
+std::istream& Transition::read(const model_t& model, std::istream& is)
 {
+    edges.clear();
     int process, edge, select;
     while (is >> process >> edge) {
         auto e = Edge{process, edge};
         is >> skip_spaces;
         while (is.peek() != '\n' && is.peek() != ';') {
-            if (is >> select) {
+            if (is >> select)
                 e.select.push_back(select);
-            } else {
-                std::cerr << "Transition format error" << endl;
-                exit(EXIT_FAILURE);
-            }
+            else
+                throw invalid_format{"In transition select values"};
             is >> skip_spaces;
         }
         if (is.get() == '\n')  // old format without ';'
@@ -462,73 +334,41 @@ Transition::Transition(std::istream& is)
         edges.push_back(std::move(e));
     }
     is.clear();
-    is >> read_dot;
+    return is >> read_dot;
 }
 
-/** Output operator for a symbolic state. Prints the location vector,
- * the variables and the zone of the symbolic state.
- */
-static std::ostream& operator<<(std::ostream& o, const State& state)
+/** Prints all edges in the transition including the source, destination, guard,
+ * synchronisation and assignment. */
+std::ostream& Transition::print(const model_t& model, std::ostream& os) const
 {
-    // Print location vector.
-    for (size_t p = 0; p < processCount; p++) {
-        int idx = processes[p].locations[state.get_location(p)];
-        cout << processes[p].name << '.' << layout[idx].name << " ";
-    }
-
-    // Print variables.
-    for (size_t v = 0; v < variableCount; v++) {
-        cout << variables[v] << "=" << state.get_variable(v) << ' ';
-    }
-
-    // Print clocks.
-    for (size_t i = 0; i < clockCount; i++) {
-        for (size_t j = 0; j < clockCount; j++) {
-            if (i != j) {
-                const bound_t& bnd = state.get_bound(i, j);
-                if (bnd.value != infinity.value) {
-                    cout << clocks[i] << "-" << clocks[j] << (bnd.strict ? "<" : "<=") << bnd.value << " ";
-                }
-            }
-        }
-    }
-
-    return o;
-}
-
-/** Output operator for a transition. Prints all edges in the
- * transition including the source, destination, guard,
- * synchronisation and assignment.
- */
-static std::ostream& operator<<(std::ostream& o, const Transition& t)
-{
-    for (const auto& edge : t.edges) {
-        int eid = processes[edge.process].edges[edge.edge];
-        int src = edges[eid].source;
-        int dst = edges[eid].target;
-        int guard = edges[eid].guard;
-        int sync = edges[eid].sync;
-        int update = edges[eid].update;
-        cout << processes[edge.process].name << '.' << layout[src].name << " -> " << processes[edge.process].name << '.'
-             << layout[dst].name;
+    for (const auto& edge : edges) {
+        const auto& p = model.processes[edge.process];
+        int eid = p.edges[edge.edge];
+        const auto& e = model.edges[eid];
+        int src = e.source;
+        int dst = e.target;
+        int guard = e.guard;
+        int sync = e.sync;
+        int update = e.update;
+        os << p.name << '.' << model.layout[src].name << " -> " << p.name << '.' << model.layout[dst].name;
         if (!edge.select.empty()) {
             auto s = edge.select.begin(), se = edge.select.end();
-            cout << " [" << *s;
+            os << " [" << *s;
             while (++s != se)
-                cout << "," << *s;
-            cout << "]";
+                os << "," << *s;
+            os << "]";
         }
-        cout << " {" << expressions[guard] << "; " << expressions[sync] << "; " << expressions[update] << ";} ";
+        os << " {" << model.expressions.at(guard) << "; " << model.expressions.at(sync) << "; "
+           << model.expressions.at(update) << ";} ";
     }
 
-    return o;
+    return os;
 }
 
-/** Read and print a trace file. */
-static void loadTrace(std::istream& is)
+std::istream& trace_t::read(const model_t& model, std::istream& is)
 {
-    // Read and print trace.
-    cout << "State: " << State{is} << endl;
+    steps.clear();
+    initial.read(model, is);
     for (;;) {
         // Skip white space.
         is >> skip_spaces;
@@ -540,44 +380,59 @@ static void loadTrace(std::istream& is)
         }
 
         // Read a state and a transition.
-        auto state = State{is};
-        auto transition = Transition{is};
-
-        // Print transition and state.
-        cout << "\nTransition: " << transition << endl << "\nState: " << state << endl;
+        auto state = State{};
+        state.read(model, is);
+        auto transition = Transition{};
+        transition.read(model, is);
+        steps.emplace_back(std::move(transition), std::move(state));
     }
+    return is;
+}
+
+std::ostream& trace_t::print(const model_t& model, std::ostream& os) const
+{
+    os << "State: ";
+    initial.print(model, os) << endl;
+    for (const auto& step : steps) {
+        step.transition.print(model, os << "\nTransition: ") << endl;
+        step.state.print(model, os << "\nState: ") << endl;
+    }
+    return os;
 }
 
 int main(int argc, char* argv[])
 {
     try {
         if (argc < 3) {
-            printf("Synopsis: %s <if> <trace>\n", argv[0]);
+            std::cerr << "Utility reads a model (intermediate format) and a trace (xtr/\"dot\" format) and produces "
+                         "human readable trace.";
+            std::cerr << "Synopsis:\n\t" << argv[0] << " <if-file> <xtr-trace-file>\n";
             std::exit(EXIT_FAILURE);
         }
-
+        auto model = model_t{};
         // Load model in intermediate format.
-        if (strcmp(argv[1], "-") == 0) {
-            loadIF(std::cin);
-        } else {
+        if (strcmp(argv[1], "-") == 0)
+            model.read(std::cin);
+        else {
             auto file = std::ifstream{argv[1]};
             if (file.fail()) {
                 perror(argv[1]);
-                exit(EXIT_FAILURE);
+                std::exit(EXIT_FAILURE);
             }
-            loadIF(file);
-            file.close();
+            model.read(file);
         }
 
         // Load trace.
         auto file = std::ifstream{argv[2]};
         if (file.fail()) {
             perror(argv[2]);
-            exit(EXIT_FAILURE);
+            std::exit(EXIT_FAILURE);
         }
-        loadTrace(file);
-        file.close();
+        auto trace = trace_t{};
+        trace.read(model, file);
+        trace.print(model, std::cout);
     } catch (std::exception& e) {
         std::cerr << "Caught exception: " << e.what() << endl;
+        std::exit(EXIT_FAILURE);
     }
 }
