@@ -1,0 +1,57 @@
+State: Cat.L0 Mouse.L13 CatP.Idle MouseP.Idle Cat.s=0 Mouse.s=13 #t(0)-#time<=0 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-#t(0)<=1 #time-time<=0 time-CatP.x<=0 CatP.x-MouseP.x<=0 MouseP.x-#time<=0 
+
+Transition: MouseP.Idle -> MouseP.Move {x >= MP; 0; x = 0;} 
+
+State: Cat.L0 Mouse.L13 CatP.Idle MouseP.Move Cat.s=0 Mouse.s=13 #t(0)-#time<=-1 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-time<=0 time-CatP.x<=0 CatP.x-MouseP.x<=1 MouseP.x-#t(0)<=0 
+
+Transition: MouseP.Move -> MouseP.Idle {1; ml!; 1;} Mouse.L13 -> Mouse.L12 {1; ml?; s = 12;} 
+
+State: Cat.L0 Mouse.L12 CatP.Idle MouseP.Idle Cat.s=0 Mouse.s=12 #t(0)-#time<=-1 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-#t(0)<=2 #time-time<=0 time-CatP.x<=0 CatP.x-MouseP.x<=1 MouseP.x-#time<=-1 
+
+Transition: CatP.Idle -> CatP.Move {x >= CP; 0; x = 0;} 
+
+State: Cat.L0 Mouse.L12 CatP.Move MouseP.Idle Cat.s=0 Mouse.s=12 #t(0)-#time<=-2 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-time<=0 time-CatP.x<=2 CatP.x-MouseP.x<=-1 MouseP.x-#t(0)<=1 
+
+Transition: MouseP.Idle -> MouseP.Move {x >= MP; 0; x = 0;} 
+
+State: Cat.L0 Mouse.L12 CatP.Move MouseP.Move Cat.s=0 Mouse.s=12 #t(0)-#time<=-2 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-time<=0 time-CatP.x<=2 CatP.x-MouseP.x<=0 MouseP.x-#t(0)<=0 
+
+Transition: CatP.Move -> CatP.Idle {1; cu!; 1;} 
+
+State: Cat.L0 Mouse.L12 CatP.Idle MouseP.Move Cat.s=0 Mouse.s=12 #t(0)-#time<=-2 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-time<=0 time-CatP.x<=2 CatP.x-MouseP.x<=0 MouseP.x-#t(0)<=0 
+
+Transition: MouseP.Move -> MouseP.Idle {1; mu!; 1;} Mouse.L12 -> Mouse.L9 {1; mu?; s = 9;} 
+
+State: Cat.L0 Mouse.L9 CatP.Idle MouseP.Idle Cat.s=0 Mouse.s=9 #t(0)-#time<=-2 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-#t(0)<=3 #time-time<=0 time-CatP.x<=2 CatP.x-MouseP.x<=0 MouseP.x-#time<=-2 
+
+Transition: MouseP.Idle -> MouseP.Move {x >= MP; 0; x = 0;} 
+
+State: Cat.L0 Mouse.L9 CatP.Idle MouseP.Move Cat.s=0 Mouse.s=9 #t(0)-#time<=-3 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-time<=0 time-CatP.x<=2 CatP.x-MouseP.x<=1 MouseP.x-#t(0)<=0 
+
+Transition: MouseP.Move -> MouseP.Idle {1; mu!; 1;} Mouse.L9 -> Mouse.L5 {1; mu?; s = 5;} 
+
+State: Cat.L0 Mouse.L5 CatP.Idle MouseP.Idle Cat.s=0 Mouse.s=5 #t(0)-#time<=-3 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-#t(0)<=4 #time-time<=0 time-CatP.x<=2 CatP.x-MouseP.x<=1 MouseP.x-#time<=-3 
+
+Transition: CatP.Idle -> CatP.Move {x >= CP; 0; x = 0;} 
+
+State: Cat.L0 Mouse.L5 CatP.Move MouseP.Idle Cat.s=0 Mouse.s=5 #t(0)-#time<=-4 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-time<=0 time-CatP.x<=4 CatP.x-MouseP.x<=-1 MouseP.x-#t(0)<=1 
+
+Transition: MouseP.Idle -> MouseP.Move {x >= MP; 0; x = 0;} 
+
+State: Cat.L0 Mouse.L5 CatP.Move MouseP.Move Cat.s=0 Mouse.s=5 #t(0)-#time<=-4 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-time<=0 time-CatP.x<=4 CatP.x-MouseP.x<=0 MouseP.x-#t(0)<=0 
+
+Transition: CatP.Move -> CatP.Idle {1; cu!; 1;} 
+
+State: Cat.L0 Mouse.L5 CatP.Idle MouseP.Move Cat.s=0 Mouse.s=5 #t(0)-#time<=-4 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-time<=0 time-CatP.x<=4 CatP.x-MouseP.x<=0 MouseP.x-#t(0)<=0 
+
+Transition: MouseP.Move -> MouseP.Idle {1; mr!; 1;} Mouse.L5 -> Mouse.L6 {1; mr?; s = 6;} 
+
+State: Cat.L0 Mouse.L6 CatP.Idle MouseP.Idle Cat.s=0 Mouse.s=6 #t(0)-#time<=-4 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-#t(0)<=5 #time-time<=0 time-CatP.x<=4 CatP.x-MouseP.x<=0 MouseP.x-#time<=-4 
+
+Transition: MouseP.Idle -> MouseP.Move {x >= MP; 0; x = 0;} 
+
+State: Cat.L0 Mouse.L6 CatP.Idle MouseP.Move Cat.s=0 Mouse.s=6 #t(0)-#time<=-5 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-time<=0 time-CatP.x<=4 CatP.x-MouseP.x<=1 MouseP.x-#t(0)<=0 
+
+Transition: MouseP.Move -> MouseP.Idle {1; mu!; 1;} Mouse.L6 -> Mouse.Cheese {1; mu?; s = 3;} 
+
+State: Cat.L0 Mouse.Cheese CatP.Idle MouseP.Idle Cat.s=0 Mouse.s=3 #t(0)-#time<=-5 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-#t(0)<=6 #time-time<=0 time-CatP.x<=4 CatP.x-MouseP.x<=1 MouseP.x-#time<=-5 
