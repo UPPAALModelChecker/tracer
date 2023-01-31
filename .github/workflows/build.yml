@@ -1,4 +1,4 @@
-name: CMake-Test
+name: CMake
 
 on:
   push:
@@ -12,31 +12,34 @@ env:
 # Example:
 # https://levelup.gitconnected.com/utilizing-github-actions-to-build-and-test-on-multiple-platforms-a7fe3aa6ce2a
 jobs:
-  build-and-test:
+  Test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: ubuntu-latest
+            cmake-options: -DUBSAN=ON -DASAN=ON
             target: Linux
           - os: windows-latest
+            cmake-options:
             target: Windows
           - os: macos-latest
+            cmake-options: -DUBSAN=ON -DASAN=ON
             target: macOS
 
     steps:
     - uses: actions/checkout@v3
 
-    - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DUBSAN=ON -DASAN=ON
+    - name: Configure
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{matrix.cmake-options}}
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
     - name: Test
       working-directory: ${{github.workspace}}/build
-      run: ctest -C ${{env.BUILD_TYPE}}
+      run: ctest -C ${{env.BUILD_TYPE}} --output-on-failure
 
     - name: Compare Unix results with pre-recorded outputs
       if: ${{ matrix.os != 'windows-latest' }}
