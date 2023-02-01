@@ -1,0 +1,88 @@
+name: Release
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  Build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            cmake-options: -DTRACER_STATIC=ON
+            target: Linux
+          - os: windows-latest
+            cmake-options: -DTRACER_STATIC=ON
+            target: Windows
+          - os: macos-latest
+            cmake-options: -DTRACER_STATIC=ON
+            target: macOS
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Configure
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{matrix.cmake-options}}
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C ${{env.BUILD_TYPE}} --output-on-failure
+
+    - name: Compare Unix results with pre-recorded outputs
+      if: ${{ matrix.os != 'windows-latest' }}
+      working-directory: ${{github.workspace}}/build
+      run: |
+        ./tracer ../cat-and-mouse.if ../cat-and-mouse-1.xtr > cat-and-mouse-1.txt
+        diff ../cat-and-mouse-1.txt cat-and-mouse-1.txt
+        ./tracer ../cat-and-mouse.if ../cat-and-mouse-1.xtr > cat-and-mouse-cheese.txt
+        diff ../cat-and-mouse-cheese.txt cat-and-mouse-cheese.txt
+
+    - name: Compare Windows results with pre-recorded outputs
+      if: ${{ matrix.os == 'windows-latest' }}
+      working-directory: ${{github.workspace}}/build
+      run: |
+        ${{env.BUILD_TYPE}}\tracer.exe ..\cat-and-mouse.if ..\cat-and-mouse-1.xtr > cat-and-mouse-1.txt
+        fc.exe /L ..\cat-and-mouse-1.txt cat-and-mouse-1.txt
+        ${{env.BUILD_TYPE}}\tracer.exe ..\cat-and-mouse.if ..\cat-and-mouse-1.xtr > cat-and-mouse-cheese.txt
+        fc.exe /L ..\cat-and-mouse-cheese.txt cat-and-mouse-cheese.txt
+
+    - name: Upload Unix binaries
+      if: ${{ matrix.os != 'windows-latest' }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: tracer-${{matrix.os}}
+        path: build/tracer
+        if-no-files-found: error
+
+    - name: Upload Windows binaries
+      if: ${{ matrix.os == 'windows-latest' }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: tracer-${{matrix.os}}
+        path: build/${{env.BUILD_TYPE}}/tracer.exe
+        if-no-files-found: error
+
+  Upload:
+    needs: [ Build ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Get the release files
+        uses: action/download-artifact@v3
+        with:
+          path: .
+      - name: Display list of files
+        run: ls -R
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            tracer tracer.exe
+          tag_name: v1.0
