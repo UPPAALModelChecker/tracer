@@ -3,7 +3,7 @@ Utility `tracer` reads Uppaal symbolic traces (`.xtr` "dot" files) and prints th
 
 Limitation: cannot handle traces which contain probabilistically branching edges. The issue is that the intermediate format cannot represent branch-points and branching edge identifiers do not match the syntactical edge identifiers in the original model.
 
-## Example Usage
+## Example Usage 
 The following assumes that UPPAAL is installed and the `verifyta` utility is available
 
 Given a model `cat-and-mouse.xml` compile the document into an intermediate format file `cat-and-mouse.if`:
