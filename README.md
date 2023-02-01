@@ -18,7 +18,7 @@ Use `tracer` utility to read `cat-and-mouse.if` and `cat-and-mouse-1.xtr` and pr
 ```bash
 tracer cat-and-mouse.if cat-and-mouse-1.xtr
 ```
-Example output (see *.txt files):
+Example output (see [cat-and-mouse-1.txt](cat-and-mouse-1.txt)):
 ```txt
 State: Cat.L0 Mouse.L13 CatP.Idle MouseP.Idle Cat.s=0 Mouse.s=13 #t(0)-#time<=0 #t(0)-time<=0 #t(0)-CatP.x<=0 #t(0)-MouseP.x<=0 #time-#t(0)<=1 #time-time<=0 time-CatP.x<=0 CatP.x-MouseP.x<=0 MouseP.x-#time<=0 
 
@@ -36,27 +36,50 @@ State: Cat.L0 Mouse.L12 CatP.Move MouseP.Idle Cat.s=0 Mouse.s=12 #t(0)-#time<=-2
 ```
 
 ## Compile from Source
-### Linux
-Install build tools:
+### Linux: Install Tools
 ```bash
-sudo apt install g++ cmake ninja-build
+sudo apt install git g++ cmake ninja-build
 ```
-Generate `cmake` build system into a new `build` directory:
+
+### Windows: Install Tools
+
+- [Visual Studio Community](https://visualstudio.microsoft.com/vs/community/). 
+  Make sure to select `Desktop development with C++`, `C++ CMake tools for Windows`
+- [git](https://git-scm.com/download/win).
+  Make sure to select `Add git to the PATH`.
+- [CMake](https://cmake.org/download/). Make sure to select `Add cmake to the PATH`.
+
+Start PowerShell (press `Win+R`, enter `pwsh`, press ENTER) and continue with compilation.
+
+### macOS: Install Tools
+- [Xcode](https://developer.apple.com/xcode/) from AppStore. Start at least once to ensure that command line tools are installed and license is accepted.
+- [git](https://git-scm.com/download/mac)
+- [CMake](https://cmake.org/download/)
+
+### Compile from Terminal Shell
+Checkout the source:
 ```bash
-cmake -B build -G Ninja .
+git clone https://github.com/UPPAALModelChecker/tracer.git
+```
+Generate `cmake` build system into a new `build` folder from `tracer` source folder:
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release tracer
 ```
 Compile:
 ```bash
-cmake --build build
+cmake --build build --config Release
 ```
 Test:
 ```bash
-(cd build ; ctest --output-on-failure)
+cd build
+ctest -C Release --output-on-failure
 ```
 
 ### Development
 Enable sanitizers to catch undefined behavior and memory issues by adding their options during the build generation:
 ```bash
-cmake -B build -DUBSAN=ON -DASAN=ON -G Ninja .
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DUBSAN=ON -DASAN=ON -G Ninja tracer
+cmake --build build --config Debug
+cd build
+ctest -C Debug --output-on-failure
 ```
-

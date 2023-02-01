@@ -21,6 +21,7 @@
 #include "tracer.hpp"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -400,32 +401,36 @@ std::ostream& trace_t::print(const model_t& model, std::ostream& os) const
     return os;
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char* args[])
 {
     try {
         if (argc < 3) {
-            std::cerr << "Utility reads a model (intermediate format) and a trace (xtr/\"dot\" format) and produces "
-                         "human readable trace.";
-            std::cerr << "Synopsis:\n\t" << argv[0] << " <if-file> <xtr-trace-file>\n";
+            auto name = std::filesystem::path{args[0]}.filename().string();
+            std::cerr << name
+                      << " produces a human readable diagnostic trace by reading:\n"
+                         "\ta UPPAAL model file in the intermediate format (produced by "
+                         "\"UPPAAL_COMPILE_ONLY=1 verifyta model.xml\") and\n"
+                         "\ta trace file in xtr (\"dot\") format.\n";
+            std::cerr << "Synopsis:\n\t" << name << " <if-file> <xtr-trace-file>\n";
             std::exit(EXIT_FAILURE);
         }
         auto model = model_t{};
         // Load model in intermediate format.
-        if (strcmp(argv[1], "-") == 0)
+        if (strcmp(args[1], "-") == 0)
             model.read(std::cin);
         else {
-            auto file = std::ifstream{argv[1]};
+            auto file = std::ifstream{args[1]};
             if (file.fail()) {
-                perror(argv[1]);
+                perror(args[1]);
                 std::exit(EXIT_FAILURE);
             }
             model.read(file);
         }
 
         // Load trace.
-        auto file = std::ifstream{argv[2]};
+        auto file = std::ifstream{args[2]};
         if (file.fail()) {
-            perror(argv[2]);
+            perror(args[2]);
             std::exit(EXIT_FAILURE);
         }
         auto trace = trace_t{};
